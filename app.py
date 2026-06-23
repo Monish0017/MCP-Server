@@ -1,4 +1,5 @@
 import os
+from contextlib import asynccontextmanager
 from datetime import datetime
 
 from mcp.server.fastmcp import FastMCP
@@ -9,7 +10,6 @@ from starlette.routing import Mount, Route
 
 mcp = FastMCP(
     "simple-name-time-mcp-server",
-    stateless_http=True,
     json_response=True,
     streamable_http_path="/",
 )
@@ -32,11 +32,18 @@ def health(_request):
     return JSONResponse({"status": "ok"})
 
 
+@asynccontextmanager
+async def lifespan(_app):
+    async with mcp.session_manager.run():
+        yield
+
+
 app = Starlette(
     routes=[
         Route("/health", health),
         Mount("/mcp", app=mcp.streamable_http_app()),
-    ]
+    ],
+    lifespan=lifespan,
 )
 
 
