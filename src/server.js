@@ -1,5 +1,6 @@
 import { Server } from "@modelcontextprotocol/sdk/server/index.js";
-import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
+import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
+import { createServer } from "node:http";
 import {
   CallToolRequestSchema,
   ListToolsRequestSchema,
@@ -121,8 +122,36 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
 });
 
 async function start() {
-  const transport = new StdioServerTransport();
+  const transport = new StreamableHTTPServerTransport({
+    sessionIdGenerator: undefined,
+    enableJsonResponse: true,
+  });
   await server.connect(transport);
+
+  const port = Number(process.env.PORT || 3000);
+  const host = "0.0.0.0";
+
+  const httpServer = createServer(async (req, res) => {
+    const requestUrl = new URL(req.url || "/", `http://${req.headers.host || "localhost"}`);
+
+    if (req.method === "GET" && requestUrl.pathname === "/health") {
+      res.writeHead(200, { "Content-Type": "application/json" });
+      res.end(JSON.stringify({ status: "ok" }));
+      return;
+    }
+
+    if (requestUrl.pathname === "/mcp") {
+      await transport.handleRequest(req, res);
+      return;
+    }
+
+    res.writeHead(404, { "Content-Type": "application/json" });
+    res.end(JSON.stringify({ error: "Not found" }));
+  });
+
+  httpServer.listen(port, host, () => {
+    console.log(`MCP HTTP server listening on ${host}:${port}`);
+  });
 }
 
 start().catch((error) => {

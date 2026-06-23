@@ -19,6 +19,11 @@ Example response format:
 2. Start the server:
    `npm start`
 
+The server runs on `PORT` (default `3000`) and exposes:
+
+- MCP endpoint: `POST /mcp` (also supports MCP GET/DELETE transport methods)
+- Health endpoint: `GET /health`
+
 ## Tool exposed
 
 - Tool name: `get_current_time_for_name`
@@ -32,3 +37,10 @@ Example response format:
 
 - Uses no internal or company APIs.
 - Uses local machine/server time where the MCP server runs.
+
+## Render Web Service settings
+
+- Build Command: `npm install`
+- Start Command: `npm start`
+- Root Directory: leave empty (repo root)
+- Health Check Path: `/health`
