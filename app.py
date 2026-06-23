@@ -11,7 +11,7 @@ from starlette.routing import Mount, Route
 mcp = FastMCP(
     "simple-name-time-mcp-server",
     json_response=True,
-    streamable_http_path="/",
+    streamable_http_path="/mcp",
 )
 
 
@@ -41,7 +41,7 @@ async def lifespan(_app):
 app = Starlette(
     routes=[
         Route("/health", health),
-        Mount("/mcp", app=mcp.streamable_http_app()),
+        Mount("/", app=mcp.streamable_http_app()),
     ],
     lifespan=lifespan,
 )
