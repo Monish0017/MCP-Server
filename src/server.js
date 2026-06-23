@@ -1,8 +1,10 @@
 import { Server } from "@modelcontextprotocol/sdk/server/index.js";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
-import { createServer } from "node:http";
+import express from "express";
+import { randomUUID } from "node:crypto";
 import {
   CallToolRequestSchema,
+  isInitializeRequest,
   ListToolsRequestSchema,
 } from "@modelcontextprotocol/sdk/types.js";
 
@@ -35,6 +37,11 @@ const server = new Server(
     },
   },
 );
+
+const app = express();
+app.use(express.json());
+
+const transports = {};
 
 server.setRequestHandler(ListToolsRequestSchema, async () => {
   return {
@@ -122,34 +129,77 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
 });
 
 async function start() {
-  const transport = new StreamableHTTPServerTransport({
-    sessionIdGenerator: undefined,
-    enableJsonResponse: true,
-  });
-  await server.connect(transport);
-
   const port = Number(process.env.PORT || 3000);
   const host = "0.0.0.0";
 
-  const httpServer = createServer(async (req, res) => {
-    const requestUrl = new URL(req.url || "/", `http://${req.headers.host || "localhost"}`);
-
-    if (req.method === "GET" && requestUrl.pathname === "/health") {
-      res.writeHead(200, { "Content-Type": "application/json" });
-      res.end(JSON.stringify({ status: "ok" }));
-      return;
-    }
-
-    if (requestUrl.pathname === "/mcp") {
-      await transport.handleRequest(req, res);
-      return;
-    }
-
-    res.writeHead(404, { "Content-Type": "application/json" });
-    res.end(JSON.stringify({ error: "Not found" }));
+  app.get("/health", (_req, res) => {
+    res.status(200).json({ status: "ok" });
   });
 
-  httpServer.listen(port, host, () => {
+  const handleMcpRequest = async (req, res) => {
+    const sessionId = req.headers["mcp-session-id"];
+
+    try {
+      let transport;
+
+      if (sessionId && transports[sessionId]) {
+        transport = transports[sessionId];
+      } else if (!sessionId && isInitializeRequest(req.body)) {
+        transport = new StreamableHTTPServerTransport({
+          sessionIdGenerator: () => randomUUID(),
+          enableJsonResponse: true,
+          onsessioninitialized: (newSessionId) => {
+            transports[newSessionId] = transport;
+          },
+        });
+
+        transport.onclose = () => {
+          const closedSessionId = transport.sessionId;
+          if (closedSessionId && transports[closedSessionId]) {
+            delete transports[closedSessionId];
+          }
+        };
+
+        await server.connect(transport);
+        await transport.handleRequest(req, res, req.body);
+        return;
+      } else {
+        res.status(400).json({
+          jsonrpc: "2.0",
+          error: {
+            code: -32000,
+            message: "Bad Request: No valid session ID provided",
+          },
+          id: null,
+        });
+        return;
+      }
+
+      await transport.handleRequest(req, res, req.body);
+    } catch (error) {
+      console.error("Error handling MCP request:", error);
+      if (!res.headersSent) {
+        res.status(500).json({
+          jsonrpc: "2.0",
+          error: {
+            code: -32603,
+            message: "Internal server error",
+          },
+          id: null,
+        });
+      }
+    }
+  };
+
+  app.post("/mcp", handleMcpRequest);
+  app.get("/mcp", handleMcpRequest);
+  app.delete("/mcp", handleMcpRequest);
+
+  app.use((_req, res) => {
+    res.status(404).json({ error: "Not found" });
+  });
+
+  app.listen(port, host, () => {
     console.log(`MCP HTTP server listening on ${host}:${port}`);
   });
 }
