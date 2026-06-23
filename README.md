@@ -15,9 +15,9 @@ Example response format:
 ## Setup
 
 1. Install dependencies:
-   `npm install`
+   `python -m pip install -r requirements.txt`
 2. Start the server:
-   `npm start`
+   `python app.py`
 
 The server runs on `PORT` (default `3000`) and exposes:
 
@@ -40,7 +40,7 @@ The server runs on `PORT` (default `3000`) and exposes:
 
 ## Render Web Service settings
 
-- Build Command: `npm install`
-- Start Command: `npm start`
+- Build Command: `python -m pip install -r requirements.txt`
+- Start Command: `python app.py`
 - Root Directory: leave empty (repo root)
 - Health Check Path: `/health`
